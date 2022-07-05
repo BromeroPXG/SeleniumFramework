@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>pxg.html</h1>
+    <p>Report generated on 23-May-2022 at 10:06:02 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.0.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Base URL</td>
+        <td></td></tr>
+      <tr>
+        <td>Packages</td>
+        <td>{&apos;pytest&apos;: &apos;7.1.2&apos;, &apos;py&apos;: &apos;1.11.0&apos;, &apos;pluggy&apos;: &apos;1.0.0&apos;}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.19042-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{&apos;allure-pytest&apos;: &apos;2.9.45&apos;, &apos;base-url&apos;: &apos;1.4.2&apos;, &apos;html&apos;: &apos;2.0.1&apos;, &apos;metadata&apos;: &apos;2.0.1&apos;, &apos;ordering&apos;: &apos;0.6&apos;, &apos;rerunfailures&apos;: &apos;10.2&apos;, &apos;variables&apos;: &apos;1.9.0&apos;, &apos;xdist&apos;: &apos;2.5.0&apos;, &apos;xdist-tracker&apos;: &apos;0.0.2&apos;, &apos;seleniumbase&apos;: &apos;2.5.2&apos;}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.9.9</td></tr></table>
+    <h2>Summary</h2>
+    <p>11 tests ran in 275.80 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">4 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">7 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>, <input checked="true" class="filter" data-test-result="rerun" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="rerun">0 rerun</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_all_SKUs_exist[chrome-https://production.pxg.com/gen4-0811xf-driver/DR-PXG15.html-DR-PXG15]</td>
+          <td class="col-duration">35.03</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;testCases.test_end_to_end.Test_end_to_end_test object at 0x000001A8C0BB6460&gt;, page_url = &#x27;https://production.pxg.com/gen4-0811xf-driver/DR-PXG15.html&#x27;, SKU = &#x27;DR-PXG15&#x27;<br/><br/>    @pytest.mark.parametrize(&quot;page_url,SKU&quot;, ExcelData().get_SKU_validation_params(environment, pages))<br/>    def test_all_SKUs_exist(self,page_url,SKU):<br/>    # def test_all_SKUs_exist(self):<br/>        # page_url = ExcelData().get_URL_from_page(&#x27;Drivers&#x27;, self.current_SKU)<br/>        # SKU = &quot;DR-PXG15&quot;<br/>        self.driver.get(page_url)<br/>        configurator_sku_list_master = SOQL_query().get_SKU_list(SKU)<br/>        time.sleep(2)<br/>        self.driver_page = driver_configurator(self.driver)<br/>        configurator_sku_list_test = self.driver_page.get_list_of_all_configurator_SKU()<br/>        flatlist = [item for elem in configurator_sku_list_test for item in elem]<br/>        skus_in_configurator = (set(flatlist) - set(configurator_sku_list_master))<br/>        skus_NOT_in_configurator = (set(configurator_sku_list_master) - set(flatlist))<br/>    <br/>        if all(x in flatlist for x in configurator_sku_list_master):<br/>            self.logger.info(f&quot;******PASS******&quot;)<br/>            self.logger.info(f&quot;******All SKUs in {SKU} Configurator are in the configurator******&quot;)<br/>            assert True<br/>        else:<br/>            self.logger.info(f&quot;******FAIL******&quot;)<br/>            self.logger.info(f&quot;******RESULTS FOR {SKU}******&quot;)<br/>            self.logger.info(f&quot;******-------------------------------------------******&quot;)<br/>            self.logger.info(f&quot;SKUs MISSING from configurator: {skus_NOT_in_configurator}&quot;)<br/>            self.logger.info(f&quot;Extra SKUS that should NOT be in configurator: {skus_in_configurator}&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>testCases\test_end_to_end.py:82: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_end_to_end.py:77 ******FAIL******
+[32mINFO    [0m root:test_end_to_end.py:78 ******RESULTS FOR DR-PXG15******
+[32mINFO    [0m root:test_end_to_end.py:79 ******-------------------------------------------******
+[32mINFO    [0m root:test_end_to_end.py:80 SKUs MISSING from configurator: {&#x27;S-TENSEI-CK-B-50A&#x27;, &#x27;S-FUJI-VENTUSBLK-7-S&#x27;, &#x27;S-TENSEI-CKPRO-70TX&#x27;, &#x27;S-FUJI-VENTUSBLK-6-X&#x27;, &#x27;S-GRANDBASSARA-29-L&#x27;, &#x27;S-TENSEI-CK-B-50R&#x27;, &#x27;S-FUJI-MOTOREX-F3-6-S&#x27;, &#x27;G-GP-TOURV-CORD&#x27;, &#x27;S-FUJI-VENTUSBLK-6-S&#x27;, &#x27;S-FUJI-MOTOREX-F3-7-S&#x27;, &#x27;S-FUJI-VENTUSBLK-7-X&#x27;, &#x27;HC2-GEN4-DRIVER-GRY&#x27;, &#x27;S-TENSEI-CK-B-50L&#x27;, &#x27;S-FUJI-VENTUSRED-5-R&#x27;}
+[32mINFO    [0m root:test_end_to_end.py:81 Extra SKUS that should NOT be in configurator: set()<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_all_SKUs_exist[chrome-https://production.pxg.com/gen4-0811x-driver/DR-PXG12.html-DR-PXG12]</td>
+          <td class="col-duration">35.30</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;testCases.test_end_to_end.Test_end_to_end_test object at 0x000001A8C0BB63D0&gt;, page_url = &#x27;https://production.pxg.com/gen4-0811x-driver/DR-PXG12.html&#x27;, SKU = &#x27;DR-PXG12&#x27;<br/><br/>    @pytest.mark.parametrize(&quot;page_url,SKU&quot;, ExcelData().get_SKU_validation_params(environment, pages))<br/>    def test_all_SKUs_exist(self,page_url,SKU):<br/>    # def test_all_SKUs_exist(self):<br/>        # page_url = ExcelData().get_URL_from_page(&#x27;Drivers&#x27;, self.current_SKU)<br/>        # SKU = &quot;DR-PXG15&quot;<br/>        self.driver.get(page_url)<br/>        configurator_sku_list_master = SOQL_query().get_SKU_list(SKU)<br/>        time.sleep(2)<br/>        self.driver_page = driver_configurator(self.driver)<br/>        configurator_sku_list_test = self.driver_page.get_list_of_all_configurator_SKU()<br/>        flatlist = [item for elem in configurator_sku_list_test for item in elem]<br/>        skus_in_configurator = (set(flatlist) - set(configurator_sku_list_master))<br/>        skus_NOT_in_configurator = (set(configurator_sku_list_master) - set(flatlist))<br/>    <br/>        if all(x in flatlist for x in configurator_sku_list_master):<br/>            self.logger.info(f&quot;******PASS******&quot;)<br/>            self.logger.info(f&quot;******All SKUs in {SKU} Configurator are in the configurator******&quot;)<br/>            assert True<br/>        else:<br/>            self.logger.info(f&quot;******FAIL******&quot;)<br/>            self.logger.info(f&quot;******RESULTS FOR {SKU}******&quot;)<br/>            self.logger.info(f&quot;******-------------------------------------------******&quot;)<br/>            self.logger.info(f&quot;SKUs MISSING from configurator: {skus_NOT_in_configurator}&quot;)<br/>            self.logger.info(f&quot;Extra SKUS that should NOT be in configurator: {skus_in_configurator}&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>testCases\test_end_to_end.py:82: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_end_to_end.py:77 ******FAIL******
+[32mINFO    [0m root:test_end_to_end.py:78 ******RESULTS FOR DR-PXG12******
+[32mINFO    [0m root:test_end_to_end.py:79 ******-------------------------------------------******
+[32mINFO    [0m root:test_end_to_end.py:80 SKUs MISSING from configurator: {&#x27;S-TENSEI-CK-B-50A&#x27;, &#x27;S-FUJI-VENTUSBLK-7-S&#x27;, &#x27;S-TENSEI-CKPRO-70TX&#x27;, &#x27;S-FUJI-VENTUSBLK-6-X&#x27;, &#x27;S-GRANDBASSARA-29-L&#x27;, &#x27;S-TENSEI-CK-B-50R&#x27;, &#x27;S-FUJI-MOTOREX-F3-6-S&#x27;, &#x27;G-GP-TOURV-CORD&#x27;, &#x27;S-FUJI-VENTUSBLK-6-S&#x27;, &#x27;S-FUJI-MOTOREX-F3-7-S&#x27;, &#x27;S-FUJI-VENTUSBLK-7-X&#x27;, &#x27;HC2-GEN4-DRIVER-GRY&#x27;, &#x27;S-TENSEI-CK-B-50L&#x27;, &#x27;S-FUJI-VENTUSRED-5-R&#x27;}
+[32mINFO    [0m root:test_end_to_end.py:81 Extra SKUS that should NOT be in configurator: set()<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_all_SKUs_exist[chrome-https://production.pxg.com/gen4-0811xt-driver/DR-PXG13.html-DR-PXG13]</td>
+          <td class="col-duration">55.31</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;testCases.test_end_to_end.Test_end_to_end_test object at 0x000001A8C0BB6430&gt;, page_url = &#x27;https://production.pxg.com/gen4-0811xt-driver/DR-PXG13.html&#x27;, SKU = &#x27;DR-PXG13&#x27;<br/><br/>    @pytest.mark.parametrize(&quot;page_url,SKU&quot;, ExcelData().get_SKU_validation_params(environment, pages))<br/>    def test_all_SKUs_exist(self,page_url,SKU):<br/>    # def test_all_SKUs_exist(self):<br/>        # page_url = ExcelData().get_URL_from_page(&#x27;Drivers&#x27;, self.current_SKU)<br/>        # SKU = &quot;DR-PXG15&quot;<br/>        self.driver.get(page_url)<br/>        configurator_sku_list_master = SOQL_query().get_SKU_list(SKU)<br/>        time.sleep(2)<br/>        self.driver_page = driver_configurator(self.driver)<br/>        configurator_sku_list_test = self.driver_page.get_list_of_all_configurator_SKU()<br/>        flatlist = [item for elem in configurator_sku_list_test for item in elem]<br/>        skus_in_configurator = (set(flatlist) - set(configurator_sku_list_master))<br/>        skus_NOT_in_configurator = (set(configurator_sku_list_master) - set(flatlist))<br/>    <br/>        if all(x in flatlist for x in configurator_sku_list_master):<br/>            self.logger.info(f&quot;******PASS******&quot;)<br/>            self.logger.info(f&quot;******All SKUs in {SKU} Configurator are in the configurator******&quot;)<br/>            assert True<br/>        else:<br/>            self.logger.info(f&quot;******FAIL******&quot;)<br/>            self.logger.info(f&quot;******RESULTS FOR {SKU}******&quot;)<br/>            self.logger.info(f&quot;******-------------------------------------------******&quot;)<br/>            self.logger.info(f&quot;SKUs MISSING from configurator: {skus_NOT_in_configurator}&quot;)<br/>            self.logger.info(f&quot;Extra SKUS that should NOT be in configurator: {skus_in_configurator}&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>testCases\test_end_to_end.py:82: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_end_to_end.py:77 ******FAIL******
+[32mINFO    [0m root:test_end_to_end.py:78 ******RESULTS FOR DR-PXG13******
+[32mINFO    [0m root:test_end_to_end.py:79 ******-------------------------------------------******
+[32mINFO    [0m root:test_end_to_end.py:80 SKUs MISSING from configurator: {&#x27;S-TENSEI-CK-B-50A&#x27;, &#x27;S-FUJI-VENTUSBLK-7-S&#x27;, &#x27;S-TENSEI-CKPRO-70TX&#x27;, &#x27;S-FUJI-VENTUSBLK-6-X&#x27;, &#x27;S-GRANDBASSARA-29-L&#x27;, &#x27;S-TENSEI-CK-B-50R&#x27;, &#x27;S-FUJI-MOTOREX-F3-6-S&#x27;, &#x27;G-GP-TOURV-CORD&#x27;, &#x27;S-FUJI-VENTUSBLK-6-S&#x27;, &#x27;S-FUJI-MOTOREX-F3-7-S&#x27;, &#x27;S-FUJI-VENTUSBLK-7-X&#x27;, &#x27;HC2-GEN4-DRIVER-GRY&#x27;, &#x27;S-TENSEI-CK-B-50L&#x27;, &#x27;S-FUJI-VENTUSRED-5-R&#x27;}
+[32mINFO    [0m root:test_end_to_end.py:81 Extra SKUS that should NOT be in configurator: set()<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_all_SKUs_exist[chrome-https://production.pxg.com/prototype-0811x-driver/DR-PXG9.html-DR-PXG9]</td>
+          <td class="col-duration">34.50</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;testCases.test_end_to_end.Test_end_to_end_test object at 0x000001A8C0BB6250&gt;, page_url = &#x27;https://production.pxg.com/prototype-0811x-driver/DR-PXG9.html&#x27;, SKU = &#x27;DR-PXG9&#x27;<br/><br/>    @pytest.mark.parametrize(&quot;page_url,SKU&quot;, ExcelData().get_SKU_validation_params(environment, pages))<br/>    def test_all_SKUs_exist(self,page_url,SKU):<br/>    # def test_all_SKUs_exist(self):<br/>        # page_url = ExcelData().get_URL_from_page(&#x27;Drivers&#x27;, self.current_SKU)<br/>        # SKU = &quot;DR-PXG15&quot;<br/>        self.driver.get(page_url)<br/>        configurator_sku_list_master = SOQL_query().get_SKU_list(SKU)<br/>        time.sleep(2)<br/>        self.driver_page = driver_configurator(self.driver)<br/>        configurator_sku_list_test = self.driver_page.get_list_of_all_configurator_SKU()<br/>        flatlist = [item for elem in configurator_sku_list_test for item in elem]<br/>        skus_in_configurator = (set(flatlist) - set(configurator_sku_list_master))<br/>        skus_NOT_in_configurator = (set(configurator_sku_list_master) - set(flatlist))<br/>    <br/>        if all(x in flatlist for x in configurator_sku_list_master):<br/>            self.logger.info(f&quot;******PASS******&quot;)<br/>            self.logger.info(f&quot;******All SKUs in {SKU} Configurator are in the configurator******&quot;)<br/>            assert True<br/>        else:<br/>            self.logger.info(f&quot;******FAIL******&quot;)<br/>            self.logger.info(f&quot;******RESULTS FOR {SKU}******&quot;)<br/>            self.logger.info(f&quot;******-------------------------------------------******&quot;)<br/>            self.logger.info(f&quot;SKUs MISSING from configurator: {skus_NOT_in_configurator}&quot;)<br/>            self.logger.info(f&quot;Extra SKUS that should NOT be in configurator: {skus_in_configurator}&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>testCases\test_end_to_end.py:82: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_end_to_end.py:77 ******FAIL******
+[32mINFO    [0m root:test_end_to_end.py:78 ******RESULTS FOR DR-PXG9******
+[32mINFO    [0m root:test_end_to_end.py:79 ******-------------------------------------------******
+[32mINFO    [0m root:test_end_to_end.py:80 SKUs MISSING from configurator: {&#x27;S-TENSEI-CK-B-50A&#x27;, &#x27;HC2-2020-DRIVER-BLK&#x27;, &#x27;S-TENSEI-CKPRO-70TX&#x27;, &#x27;S-FUJI-VENTUSBLK-6-X&#x27;, &#x27;S-FUJI-VENTUSBLK-7-S&#x27;, &#x27;S-GRANDBASSARA-29-L&#x27;, &#x27;S-TENSEI-CK-B-50R&#x27;, &#x27;S-FUJI-MOTOREX-F3-6-S&#x27;, &#x27;G-GP-TOURV-CORD&#x27;, &#x27;S-FUJI-VENTUSBLK-6-S&#x27;, &#x27;S-FUJI-MOTOREX-F3-7-S&#x27;, &#x27;S-FUJI-VENTUSBLK-7-X&#x27;, &#x27;S-TENSEI-CK-B-50L&#x27;, &#x27;S-FUJI-VENTUSRED-5-R&#x27;, &#x27;HC2-GEN2-DRIVER-BLK&#x27;}
+[32mINFO    [0m root:test_end_to_end.py:81 Extra SKUS that should NOT be in configurator: set()<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_all_SKUs_exist[chrome-https://production.pxg.com/prototype-0811xplus-driver/DR-PXG9P.html-DR-PXG9P]</td>
+          <td class="col-duration">34.70</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;testCases.test_end_to_end.Test_end_to_end_test object at 0x000001A8C0BB6190&gt;, page_url = &#x27;https://production.pxg.com/prototype-0811xplus-driver/DR-PXG9P.html&#x27;, SKU = &#x27;DR-PXG9P&#x27;<br/><br/>    @pytest.mark.parametrize(&quot;page_url,SKU&quot;, ExcelData().get_SKU_validation_params(environment, pages))<br/>    def test_all_SKUs_exist(self,page_url,SKU):<br/>    # def test_all_SKUs_exist(self):<br/>        # page_url = ExcelData().get_URL_from_page(&#x27;Drivers&#x27;, self.current_SKU)<br/>        # SKU = &quot;DR-PXG15&quot;<br/>        self.driver.get(page_url)<br/>        configurator_sku_list_master = SOQL_query().get_SKU_list(SKU)<br/>        time.sleep(2)<br/>        self.driver_page = driver_configurator(self.driver)<br/>        configurator_sku_list_test = self.driver_page.get_list_of_all_configurator_SKU()<br/>        flatlist = [item for elem in configurator_sku_list_test for item in elem]<br/>        skus_in_configurator = (set(flatlist) - set(configurator_sku_list_master))<br/>        skus_NOT_in_configurator = (set(configurator_sku_list_master) - set(flatlist))<br/>    <br/>        if all(x in flatlist for x in configurator_sku_list_master):<br/>            self.logger.info(f&quot;******PASS******&quot;)<br/>            self.logger.info(f&quot;******All SKUs in {SKU} Configurator are in the configurator******&quot;)<br/>            assert True<br/>        else:<br/>            self.logger.info(f&quot;******FAIL******&quot;)<br/>            self.logger.info(f&quot;******RESULTS FOR {SKU}******&quot;)<br/>            self.logger.info(f&quot;******-------------------------------------------******&quot;)<br/>            self.logger.info(f&quot;SKUs MISSING from configurator: {skus_NOT_in_configurator}&quot;)<br/>            self.logger.info(f&quot;Extra SKUS that should NOT be in configurator: {skus_in_configurator}&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>testCases\test_end_to_end.py:82: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_end_to_end.py:77 ******FAIL******
+[32mINFO    [0m root:test_end_to_end.py:78 ******RESULTS FOR DR-PXG9P******
+[32mINFO    [0m root:test_end_to_end.py:79 ******-------------------------------------------******
+[32mINFO    [0m root:test_end_to_end.py:80 SKUs MISSING from configurator: {&#x27;S-TENSEI-CK-B-50A&#x27;, &#x27;HC2-2020-DRIVER-BLK&#x27;, &#x27;S-TENSEI-CKPRO-70TX&#x27;, &#x27;S-FUJI-VENTUSBLK-6-X&#x27;, &#x27;S-FUJI-VENTUSBLK-7-S&#x27;, &#x27;S-GRANDBASSARA-29-L&#x27;, &#x27;S-TENSEI-CK-B-50R&#x27;, &#x27;S-FUJI-MOTOREX-F3-6-S&#x27;, &#x27;G-GP-TOURV-CORD&#x27;, &#x27;S-FUJI-VENTUSBLK-6-S&#x27;, &#x27;S-FUJI-MOTOREX-F3-7-S&#x27;, &#x27;S-FUJI-VENTUSBLK-7-X&#x27;, &#x27;S-TENSEI-CK-B-50L&#x27;, &#x27;S-FUJI-VENTUSRED-5-R&#x27;, &#x27;HC2-GEN2-DRIVER-BLK&#x27;}
+[32mINFO    [0m root:test_end_to_end.py:81 Extra SKUS that should NOT be in configurator: set()<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_all_SKUs_exist[chrome-https://production.pxg.com/2021-0211-driver/DL-PXG14.html-DL-PXG14]</td>
+          <td class="col-duration">41.77</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;testCases.test_end_to_end.Test_end_to_end_test object at 0x000001A8C0BB61F0&gt;, page_url = &#x27;https://production.pxg.com/2021-0211-driver/DL-PXG14.html&#x27;, SKU = &#x27;DL-PXG14&#x27;<br/><br/>    @pytest.mark.parametrize(&quot;page_url,SKU&quot;, ExcelData().get_SKU_validation_params(environment, pages))<br/>    def test_all_SKUs_exist(self,page_url,SKU):<br/>    # def test_all_SKUs_exist(self):<br/>        # page_url = ExcelData().get_URL_from_page(&#x27;Drivers&#x27;, self.current_SKU)<br/>        # SKU = &quot;DR-PXG15&quot;<br/>        self.driver.get(page_url)<br/>        configurator_sku_list_master = SOQL_query().get_SKU_list(SKU)<br/>        time.sleep(2)<br/>        self.driver_page = driver_configurator(self.driver)<br/>        configurator_sku_list_test = self.driver_page.get_list_of_all_configurator_SKU()<br/>        flatlist = [item for elem in configurator_sku_list_test for item in elem]<br/>        skus_in_configurator = (set(flatlist) - set(configurator_sku_list_master))<br/>        skus_NOT_in_configurator = (set(configurator_sku_list_master) - set(flatlist))<br/>    <br/>        if all(x in flatlist for x in configurator_sku_list_master):<br/>            self.logger.info(f&quot;******PASS******&quot;)<br/>            self.logger.info(f&quot;******All SKUs in {SKU} Configurator are in the configurator******&quot;)<br/>            assert True<br/>        else:<br/>            self.logger.info(f&quot;******FAIL******&quot;)<br/>            self.logger.info(f&quot;******RESULTS FOR {SKU}******&quot;)<br/>            self.logger.info(f&quot;******-------------------------------------------******&quot;)<br/>            self.logger.info(f&quot;SKUs MISSING from configurator: {skus_NOT_in_configurator}&quot;)<br/>            self.logger.info(f&quot;Extra SKUS that should NOT be in configurator: {skus_in_configurator}&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>testCases\test_end_to_end.py:82: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_end_to_end.py:77 ******FAIL******
+[32mINFO    [0m root:test_end_to_end.py:78 ******RESULTS FOR DL-PXG14******
+[32mINFO    [0m root:test_end_to_end.py:79 ******-------------------------------------------******
+[32mINFO    [0m root:test_end_to_end.py:80 SKUs MISSING from configurator: {&#x27;S-TENSEI-CK-B-50A&#x27;, &#x27;HC2-2020-DRIVER-BLK&#x27;, &#x27;S-TENSEI-CKPRO-70TX&#x27;, &#x27;S-FUJI-VENTUSBLK-6-X&#x27;, &#x27;S-FUJI-VENTUSBLK-7-S&#x27;, &#x27;S-GRANDBASSARA-29-L&#x27;, &#x27;S-TENSEI-CK-B-50R&#x27;, &#x27;S-FUJI-MOTOREX-F3-6-S&#x27;, &#x27;G-GP-TOURV-CORD&#x27;, &#x27;S-FUJI-VENTUSBLK-6-S&#x27;, &#x27;S-FUJI-MOTOREX-F3-7-S&#x27;, &#x27;S-FUJI-VENTUSBLK-7-X&#x27;, &#x27;S-TENSEI-CK-B-50L&#x27;, &#x27;S-FUJI-VENTUSRED-5-R&#x27;, &#x27;HC2-GEN2-DRIVER-BLK&#x27;}
+[32mINFO    [0m root:test_end_to_end.py:81 Extra SKUS that should NOT be in configurator: set()<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_shopping_cart_validation[chrome]</td>
+          <td class="col-duration">8.26</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;testCases.test_end_to_end.Test_end_to_end_test object at 0x000001A8C0BB69D0&gt;<br/><br/>    def test_shopping_cart_validation(self):<br/>        # this section gets the dictionary from the configurator {self.DR_PXG<br/>        self.logger.info(&quot;******Get current configurator selection, add to cart, and test********&quot;)<br/>        self.driver_page = driver_configurator(self.driver)<br/>        club_selection_dict = self.driver_page.get_current_configurator_selection()<br/>        time.sleep(2)<br/>        self.driver.get(self.cart_url)<br/>        time.sleep(3)<br/>        self.cart_page = Cart_Review_Page(self.driver)<br/>        cart_dict = self.cart_page.get_cart_details_dict()<br/>    <br/>        # this section runs dictionary logic to compare keyvalues<br/>        results_dict = {}<br/>        keys = club_selection_dict.keys()<br/>        for key in club_selection_dict.keys():<br/>            if cart_dict[key].lower() in club_selection_dict[key].lower():<br/>                results_dict[key] = &quot;Pass&quot;<br/>            else:<br/>                results_dict[key] = &quot;Fail&quot;<br/>        self.cart_page.click_checkout()<br/>        if &quot;Fail&quot; in results_dict.values():<br/>            self.logger.info(&quot;******Shopping Cart Values FAIL********&quot;)<br/>            self.logger.info(f&quot;******{results_dict}********&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>testCases\test_end_to_end.py:127: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_end_to_end.py:106 ******Get current configurator selection, add to cart, and test********
+[32mINFO    [0m root:test_end_to_end.py:125 ******Shopping Cart Values FAIL********
+[32mINFO    [0m root:test_end_to_end.py:126 ******{&#x27;Dexterity&#x27;: &#x27;Pass&#x27;, &#x27;Shaft Flex&#x27;: &#x27;Pass&#x27;, &#x27;Shaft Length&#x27;: &#x27;Pass&#x27;, &#x27;Shaft Choice&#x27;: &#x27;Pass&#x27;, &#x27;Grip Size&#x27;: &#x27;Pass&#x27;, &#x27;Grip Name&#x27;: &#x27;Pass&#x27;, &#x27;Club Selection&#x27;: &#x27;Pass&#x27;, &#x27;Original Price&#x27;: &#x27;Pass&#x27;, &#x27;Selected Price&#x27;: &#x27;Pass&#x27;, &#x27;Title&#x27;: &#x27;Fail&#x27;}********<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_driver_launch[chrome]</td>
+          <td class="col-duration">8.26</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_config_page[chrome]</td>
+          <td class="col-duration">2.55</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_end_to_end.py:45 ******Test configurator page is correct******
+[32mINFO    [0m root:test_end_to_end.py:46 ******Verify configurator Title matches data******
+[32mINFO    [0m root:test_end_to_end.py:51 ******PASS Page title == PXG 0811 XF GEN4 DRIVER******<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_add_to_cart[chrome]</td>
+          <td class="col-duration">12.32</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_end_to_end.py:85 ******Test SKU is added to cart******
+[32mINFO    [0m root:test_end_to_end.py:86 ******Verify configurator Title matches data******
+[32mINFO    [0m root:test_end_to_end.py:95 ******PASS: Old cart val == 0 New cart va == 1******<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testCases/test_end_to_end.py::Test_end_to_end_test::test_checkout_login[chrome]</td>
+          <td class="col-duration">5.52</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="empty log">No log output captured.</div></td></tr></tbody></table></body></html>
